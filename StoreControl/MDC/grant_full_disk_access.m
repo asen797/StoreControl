@@ -18,6 +18,7 @@
 #import "helpers.h"
 #import "vm_unaligned_copy_switch_race.h"
 
+#if !TARGET_OS_IPHONE
 typedef NSObject* xpc_object_t;
 typedef xpc_object_t xpc_connection_t;
 typedef void (^xpc_handler_t)(xpc_object_t object);
@@ -37,6 +38,7 @@ xpc_object_t xpc_null_create(void);
 const char* xpc_dictionary_get_string(xpc_object_t xdict, const char* key);
 
 int64_t sandbox_extension_consume(const char* token);
+#endif
 
 // MARK: - patchfind
 
@@ -49,6 +51,7 @@ struct grant_full_disk_access_offsets {
   bool is_arm64e;
 };
 
+#if !TARGET_OS_IPHONE
 static bool patchfind_sections(void* executable_map,
                                struct segment_command_64** data_const_segment_out,
                                struct symtab_command** symtab_out,
@@ -382,7 +385,10 @@ static void grant_full_disk_access_impl(void (^completion)(NSString* extension_t
   });
 }
 
+#endif // !TARGET_OS_IPHONE
+
 void grant_full_disk_access(void (^completion)(NSError* _Nullable)) {
+#if !TARGET_OS_IPHONE
   if (!NSClassFromString(@"NSPresentationIntent")) {
     // class introduced in iOS 15.0.
     // TODO(zhuowei): maybe check the actual OS version instead?
@@ -397,13 +403,13 @@ void grant_full_disk_access(void (^completion)(NSError* _Nullable)) {
     return;
   }
   NSURL* documentDirectory = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
-                                                                  inDomains:NSUserDomainMask][0];
+                                                                inDomains:NSUserDomainMask][0];
   NSURL* sourceURL =
       [documentDirectory URLByAppendingPathComponent:@"full_disk_access_sandbox_token.txt"];
   NSError* error = nil;
   NSString* cachedToken = [NSString stringWithContentsOfURL:sourceURL
-                                                   encoding:NSUTF8StringEncoding
-                                                      error:&error];
+                                               encoding:NSUTF8StringEncoding
+                                                  error:&error];
   if (cachedToken) {
     int64_t handle = sandbox_extension_consume(cachedToken.UTF8String);
     if (handle > 0) {
@@ -431,5 +437,10 @@ void grant_full_disk_access(void (^completion)(NSError* _Nullable)) {
                           error:&error];
     completion(nil);
   });
+#else
+  // iOS stub: not supported on iOS
+  completion([NSError errorWithDomain:@"ca.bomberfish.fulldiskaccess"
+                                 code:7
+                             userInfo:@{NSLocalizedDescriptionKey : @"Not supported on iOS"}]);
+#endif
 }
-
